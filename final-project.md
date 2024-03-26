@@ -7,20 +7,19 @@ output:
     keep_md: true
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-library(tidyverse)
-```
+
 
 ## Data download
 
-```{r, eval=FALSE}
+
+```r
 # download data from ICPSR to local directory
 library(icpsrdata)
 icpsr_download(file_id = 37516)
 ```
 
-```{r}
+
+```r
 # import downloaded data
 load(file='icpsr_data/ICPSR_37516/DS0001/37516-0001-Data.rda')
 raw <- da37516.0001
@@ -28,7 +27,8 @@ raw <- da37516.0001
 
 ## Data cleaning
 
-```{r}
+
+```r
 # Drop missing data, sample size=4,090
 data <- raw[complete.cases(raw[ , c("SMOKER_CATEGORY","ALCOHOL","TRACT_BELOW_POVERTY","TRACT_UNINSURED_OVER_65","TRACT_OWNER_OVER_30","TRACT_UNINSURED_UNDER_18","COUNTY_VIOLENT_CRIME")]),]
 
