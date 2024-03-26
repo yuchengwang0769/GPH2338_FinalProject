@@ -2,4 +2,6 @@
 
 Olivia Chien and Yucheng Wang
 
+Date: March 25, 2024
+
 This is the repository for the final project of GPH 2338 Machine Learning in Public Health. The goal is to predict individual-level Walk Score and compare the performance of two kinds of supervised machine learning methods, linear regression and random forest, using data from ICPSR. 
