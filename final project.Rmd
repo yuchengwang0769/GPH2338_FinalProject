@@ -1,0 +1,31 @@
+---
+title: "Final Project for GPH 2338 Machine Learning in Publich Health"
+author: "Olivia Chien and Yucheng Wang"
+date: "2024-03-25"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Data download
+
+```{r}
+# download data from ICPSR to local directory
+library(icpsrdata)
+icpsr_download(file_id = 37516, download_dir = "/Users/yuchengwang/content/Machine Learning/Final Project")
+```
+
+```{r}
+# import downloaded data
+load(file='/Users/yuchengwang/content/Machine Learning/Final Project/ICPSR_37516/DS0001/37516-0001-Data.rda')
+raw <- da37516.0001
+```
+
+## Data cleaning
+
+```{r}
+
+```
+
