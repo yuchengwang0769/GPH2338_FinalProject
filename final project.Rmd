@@ -14,6 +14,8 @@ library(tidyverse)
 
 ## Data download
 
+Since ICPSR restricts redistribute the data, a proper way is to download the data to a local directory, for example, the project directory. Only codes and outputs should be push to Github. The data should be kept in the local. To download, use the email and password to login ICPSR.
+
 ```{r, eval=FALSE}
 # download data from ICPSR to local directory
 library(icpsrdata)

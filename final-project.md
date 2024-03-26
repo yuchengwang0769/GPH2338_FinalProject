@@ -11,6 +11,8 @@ output:
 
 ## Data download
 
+Since ICPSR restricts redistribute the data, a proper way is to download the data to a local directory, for example, the project directory. Only codes and outputs should be push to Github. The data should be kept in the local. To download, use the email and password to login ICPSR.
+
 
 ```r
 # download data from ICPSR to local directory
