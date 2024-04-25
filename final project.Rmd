@@ -55,13 +55,18 @@ summary(data)
 ```
 
 ```{r}
+# Add dummy variables
+
 for (x in c("GENDER","RACETHNICITY","MARITAL","EDUC","EMPLOY","INCOME","HOUSING","ALCOHOL","METRO","HOME_TYPE","SMOKER_CATEGORY","REGION9")){
   lbls <- levels(data[[x]])
   levels(data[[x]]) <- sub("^\\([0-9]+\\) +(.+$)", "\\1", lbls)
 }
 
-
 dummy <- fastDummies::dummy_cols(data, remove_first_dummy=TRUE)
+
+# Drop original categorical varibles to make the final data
+
+data <- dummy[ , !(names(dummy) %in% c("GENDER","RACETHNICITY","MARITAL","EDUC","EMPLOY","INCOME","HOUSING","ALCOHOL","METRO","HOME_TYPE","SMOKER_CATEGORY","REGION9"))]
 ```
 
 
@@ -111,7 +116,7 @@ new
 
 ## Random Forest
 ```{r}
-rf <- randomForest(WALK_SCORE ~ ., data = data, subset = train, importance = TRUE)
+rf <- randomForest(WALK_SCORE ~ ., data = tr_data, importance = TRUE)
 yhat.rf <- predict(rf.boston, newdata = Boston[-train,])
 mean((yhat.rf-boston.test)^2)
 
