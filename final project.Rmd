@@ -91,7 +91,8 @@ te_dat <- data[-(1:nrow(data)/2), ]
 ```{r}
 #feature selection
 
-#subset selection
+#best subset with BIC
+
 
 
 
