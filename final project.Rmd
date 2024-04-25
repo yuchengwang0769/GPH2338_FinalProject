@@ -12,6 +12,7 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(MASS)
 library(tree)
+library(randomForest)
 ```
 
 ## Data download
@@ -80,10 +81,10 @@ te_dat <- data[-(1:nrow(data)/2), ]
 ## Random Forest
 ```{r}
 rf <- randomForest(WALK_SCORE ~ ., data = tr_data, importance = TRUE)
-yhat.rf <- predict(rf.boston, newdata = Boston[-train,])
-mean((yhat.rf-boston.test)^2)
+yhat.rf <- predict(rf, newdata = te_dat)
+mean((yhat.rf-te_dat[,"WALK_SCORE"])^2)
 
-importance(rf.boston)
-varImpPlot(rf.boston)
+importance(rf)
+varImpPlot(rf)
 ```
 
