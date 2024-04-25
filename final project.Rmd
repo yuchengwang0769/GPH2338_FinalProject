@@ -10,6 +10,8 @@ output:
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
+library(MASS)
+library(tree)
 ```
 
 ## Data download
@@ -52,25 +54,35 @@ data$AIR_QUALITY_DAYS_PM10<- ifelse(is.na(data$AIR_QUALITY_DAYS_PM10), median(da
 summary(data)
 ```
 
+```{r}
+for (x in c("GENDER","RACETHNICITY","MARITAL","EDUC","EMPLOY","INCOME","HOUSING","ALCOHOL","METRO","HOME_TYPE","SMOKER_CATEGORY","REGION9")){
+  lbls <- levels(data[[x]])
+  levels(data[[x]]) <- sub("^\\([0-9]+\\) +(.+$)", "\\1", lbls)
+}
+
+
+dummy <- fastDummies::dummy_cols(data, remove_first_dummy=TRUE)
+```
+
 
 ```{r}
-data <- data %>%
-  mutate(case_when(GENDER=="(1) Male" ~ "Male",
-                   GENDER=="(2) Female" ~ "Female",
-                   RACETHNICITY=="(1) White, non-Hispanic" ~ "non-Hispanic White",
-                   RACETHNICITY=="(2) Black, non-Hispanic" ~ "non-Hispanic Black",
-                   RACETHNICITY=="(3) Other, non-Hispanic" ~ "non-Hispanic Other",
-                   RACETHNICITY=="(4) Hispanic" ~ "Hispanic",
-                   RACETHNICITY=="(5) 2+, non-Hispanic" ~ "non-Hispanic Multiracial",
-                   RACETHNICITY=="(6) Asian, non-Hispanic" ~ "non-Hispanic Asian",
-                   ),)
+# data <- data %>%
+#   mutate(case_when(GENDER=="(1) Male" ~ "Male",
+#                    GENDER=="(2) Female" ~ "Female",
+#                    RACETHNICITY=="(1) White, non-Hispanic" ~ "non-Hispanic White",
+#                    RACETHNICITY=="(2) Black, non-Hispanic" ~ "non-Hispanic Black",
+#                    RACETHNICITY=="(3) Other, non-Hispanic" ~ "non-Hispanic Other",
+#                    RACETHNICITY=="(4) Hispanic" ~ "Hispanic",
+#                    RACETHNICITY=="(5) 2+, non-Hispanic" ~ "non-Hispanic Multiracial",
+#                    RACETHNICITY=="(6) Asian, non-Hispanic" ~ "non-Hispanic Asian",
+#                    ),)
 ```
 
 
 ```{r}
 set.seed(123)
-tr_data <- data[1:(n/2)]
-te_dat <- data[-1(1:n/2)]
+tr_data <- data[1:(n/2), ]
+te_dat <- data[-1(1:n/2), ]
 ```
 
 
@@ -97,4 +109,12 @@ te_dat <- data[-1(1:n/2)]
 
 
 ## Random Forest
+```{r}
+rf <- randomForest(WALK_SCORE ~ ., data = data, subset = train, importance = TRUE)
+yhat.rf <- predict(rf.boston, newdata = Boston[-train,])
+mean((yhat.rf-boston.test)^2)
+
+importance(rf.boston)
+varImpPlot(rf.boston)
+```
 
