@@ -51,10 +51,6 @@ data$AIR_QUALITY_DAYS_PM10<- ifelse(is.na(data$AIR_QUALITY_DAYS_PM10), median(da
 ```
 
 ```{r}
-summary(data)
-```
-
-```{r}
 # Add dummy variables
 
 for (x in c("GENDER","RACETHNICITY","MARITAL","EDUC","EMPLOY","INCOME","HOUSING","ALCOHOL","METRO","HOME_TYPE","SMOKER_CATEGORY","REGION9")){
@@ -69,21 +65,6 @@ dummy <- fastDummies::dummy_cols(data, remove_first_dummy=TRUE)
 data <- dummy[ , !(names(dummy) %in% c("GENDER","RACETHNICITY","MARITAL","EDUC","EMPLOY","INCOME","HOUSING","ALCOHOL","METRO","HOME_TYPE","SMOKER_CATEGORY","REGION9"))]
 ```
 
-
-```{r}
-# data <- data %>%
-#   mutate(case_when(GENDER=="(1) Male" ~ "Male",
-#                    GENDER=="(2) Female" ~ "Female",
-#                    RACETHNICITY=="(1) White, non-Hispanic" ~ "non-Hispanic White",
-#                    RACETHNICITY=="(2) Black, non-Hispanic" ~ "non-Hispanic Black",
-#                    RACETHNICITY=="(3) Other, non-Hispanic" ~ "non-Hispanic Other",
-#                    RACETHNICITY=="(4) Hispanic" ~ "Hispanic",
-#                    RACETHNICITY=="(5) 2+, non-Hispanic" ~ "non-Hispanic Multiracial",
-#                    RACETHNICITY=="(6) Asian, non-Hispanic" ~ "non-Hispanic Asian",
-#                    ),)
-```
-
-
 ```{r}
 set.seed(123)
 tr_data <- data[1:(nrow(data)/2), ]
@@ -93,24 +74,6 @@ te_dat <- data[-(1:nrow(data)/2), ]
 
 ## Linear Regression
 
-```{r}
-#feature selection
-
-#best subset with BIC
-
-
-
-
-#forward selection
-
-#backward selection
-
-#ridge regression
-
-#LASSO
-```
-
-new
 
 
 
