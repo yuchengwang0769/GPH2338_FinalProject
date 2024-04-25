@@ -48,3 +48,8 @@ data$AIR_QUALITY_DAYS_PM2_5<- ifelse(is.na(data$AIR_QUALITY_DAYS_PM2_5), median(
 data$AIR_QUALITY_DAYS_PM10<- ifelse(is.na(data$AIR_QUALITY_DAYS_PM10), median(data$AIR_QUALITY_DAYS_PM10,na.rm = TRUE), data$AIR_QUALITY_DAYS_PM10)
 ```
 
+## Linear Regression
+
+## Random Forest
+
+
