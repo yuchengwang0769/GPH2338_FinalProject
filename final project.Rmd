@@ -10,9 +10,12 @@ output:
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
+library(dplyr)
 library(MASS)
 library(tree)
 library(randomForest)
+library(leaps)
+library(glmnet)
 ```
 
 ## Data download
@@ -27,7 +30,7 @@ icpsr_download(file_id = 37516)
 
 ```{r}
 # import downloaded data
-load(file='icpsr_data/ICPSR_37516/DS0001/37516-0001-Data.rda')
+load(file='icpsr_data/37516-0001-Data.rda')
 raw <- da37516.0001
 ```
 
@@ -51,22 +54,25 @@ data$AIR_QUALITY_DAYS_PM2_5<- ifelse(is.na(data$AIR_QUALITY_DAYS_PM2_5), median(
 data$AIR_QUALITY_DAYS_PM10<- ifelse(is.na(data$AIR_QUALITY_DAYS_PM10), median(data$AIR_QUALITY_DAYS_PM10,na.rm = TRUE), data$AIR_QUALITY_DAYS_PM10)
 ```
 
+
+
 ```{r}
 # Add dummy variables
-
-for (x in c("GENDER","RACETHNICITY","MARITAL","EDUC","EMPLOY","INCOME","HOUSING","ALCOHOL","METRO","HOME_TYPE","SMOKER_CATEGORY","REGION9")){
+for (x in c("GENDER","RACETHNICITY","MARITAL","EDUC","EMPLOY","INCOME","HOUSING","ALCOHOL","METRO","HOME_TYPE","SMOKER_CATEGORY","REGION9", "missing.airdata")){
   lbls <- levels(data[[x]])
   levels(data[[x]]) <- sub("^\\([0-9]+\\) +(.+$)", "\\1", lbls)
 }
 
 dummy <- fastDummies::dummy_cols(data, remove_first_dummy=TRUE)
 
-# Drop original categorical varibles to make the final data
+# Drop original categorical variables to make the final data
 
-data <- dummy[ , !(names(dummy) %in% c("GENDER","RACETHNICITY","MARITAL","EDUC","EMPLOY","INCOME","HOUSING","ALCOHOL","METRO","HOME_TYPE","SMOKER_CATEGORY","REGION9"))]
+data <- dummy[ , !(names(dummy) %in% c("GENDER","RACETHNICITY","MARITAL","EDUC","EMPLOY","INCOME","HOUSING","ALCOHOL","METRO","HOME_TYPE","SMOKER_CATEGORY","REGION9", "missing.airdata"))]
 ```
 
 ```{r}
+colnames(data) <- gsub("[-\\ - \\ \\, ]", "_", gsub("[,\\$]", "", gsub("\\+", "_or_more", gsub("___", "_", colnames(data)))))
+
 set.seed(123)
 tr_data <- data[1:(nrow(data)/2), ]
 te_dat <- data[-(1:nrow(data)/2), ]
@@ -75,7 +81,78 @@ te_dat <- data[-(1:nrow(data)/2), ]
 
 ## Linear Regression
 
+```{r}
+#SUBSET SELECTION
+#identifying a subset of the predictors we believe to be related to response, fit a model using least squares on the reduced set of variables
 
+#not using best subset due to number of variables, possible models to fit would be huge (2^113)
+
+#perhaps hybrid approach of forward and backward stepwise, as it mimics best subset while retaining computational advantages of forward/backward stepwise
+
+#but am running into issues with multicollinearlity? 
+
+
+#edit dummy
+
+#stepwise selection
+fwd.fit <- regsubsets(WALK_SCORE~., data=tr_data, method="forward")
+
+bwd.fit <- regsubsets(WALK_SCORE~., data=tr_data, method="backward")
+
+hybrid.fit <- regsubsets(WALK_SCORE~., data=tr_data,method="seqrep")
+```
+
+```{r}
+#SHRINKAGE methods, fitting a model involving all predictors, estimated coefficients are shrunken towards zero relative to the least squares estimate, can also perform variable selection. 
+#ridge:L2, lasso: L1
+
+#ridge or LASSO? 
+#i dont think we need ridge since it doesn't shrink variables to 0? but maybe we could talk about the variables that are close to 0? 
+
+x_tr <- as.matrix(tr_data[,-47])
+y_tr <- tr_data[,47, drop=TRUE]
+x_te <- as.matrix(te_dat[, -47])
+y_te <- te_dat[,47, drop=TRUE]
+
+#ridge
+#cross validation to choose tuning parameter lambda
+set.seed(1)
+ridge.cv.out <- cv.glmnet(x_tr, y_tr, alpha=0)
+plot(ridge.cv.out)
+ridge.lam <- cv.out$lambda.min 
+
+ridge.lr <- glmnet(x_tr, y_tr, alpha=0, lambda=ridge.lam, thresh=1e-12)
+ridge.tr.pred <- predict(ridge.lr, newx=x_tr)
+ridge.te.pred <- predict(ridge.lr, newx=x_te)
+ridge.tr.err <- mean((ridge.tr.pred-y_tr)^2)
+ridge.te.err <- mean((ridge.te.pred-y_tr)^2)
+ridge.tr.err
+ridge.te.err
+
+x <- as.matrix(data[,-47])
+ridge.out <- glmnet(x, data$WALK_SCORE, alpha=0)
+ridge.coef <- predict(ridge.out, type="coefficients", s=ridge.lam)
+ridge.coef[ridge.coef!=0]
+
+#LASSO
+set.seed(1)
+lasso.cv.out <- cv.glmnet(x_tr, y_tr, alpha=1)
+plot(lasso.cv.out)
+lasso.lam <- cv.out$lambda.min 
+
+lasso.lr <- glmnet(x_tr, y_tr, alpha=1, lambda=lasso.lam, thresh=1e-12)
+lasso.tr.pred <- predict(lasso.lr, newx=x_tr)
+lasso.te.pred <- predict(lasso.lr, newx=x_te)
+lasso.tr.err <- mean((lasso.tr.pred-y_tr)^2)
+lasso.te.err <- mean((lasso.te.pred-y_tr)^2)
+lasso.tr.err
+lasso.te.err 
+
+lasso.out <- glmnet(x, data$WALK_SCORE, alpha=1)
+lasso.coef <- predict(out, type="coefficients", s=lam)
+lasso.coef
+lasso.coef[lasso.coef!=0] #79 variables chosen
+```
 
 
 ## Random Forest
