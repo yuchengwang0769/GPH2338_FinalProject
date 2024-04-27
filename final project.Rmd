@@ -13,6 +13,7 @@ library(tidyverse)
 library(MASS)
 library(tree)
 library(randomForest)
+library(gbm)
 ```
 
 ## Data download
@@ -68,6 +69,10 @@ dummy <- fastDummies::dummy_cols(data, remove_first_dummy=TRUE)
 # Drop original categorical varibles to make the final data
 
 data <- dummy[ , !(names(dummy) %in% c("GENDER","RACETHNICITY","MARITAL","EDUC","EMPLOY","INCOME","HOUSING","ALCOHOL","METRO","HOME_TYPE","SMOKER_CATEGORY","REGION9"))]
+
+names(data) <- make.names(names(data), unique=TRUE)
+
+rm(dummy, da37516.0001)
 ```
 
 
@@ -86,9 +91,8 @@ data <- dummy[ , !(names(dummy) %in% c("GENDER","RACETHNICITY","MARITAL","EDUC",
 
 
 ```{r}
-set.seed(123)
-tr_data <- data[1:(nrow(data)/2), ]
-te_dat <- data[-(1:nrow(data)/2), ]
+set.seed(1)
+train <- sample(1:nrow(data),nrow(data)/2)
 ```
 
 
@@ -112,15 +116,33 @@ te_dat <- data[-(1:nrow(data)/2), ]
 
 new
 
+## KNN for regression
+
+```{r}
+std <- preProcess(data[train,], method = c("center","scale"))
+train_std <- predict(std, newdata = data[train,])
+test_std <- predict(std, newdata = data[-train,])
+
+
+```
 
 
 ## Random Forest
 ```{r}
-rf <- randomForest(WALK_SCORE ~ ., data = tr_data, importance = TRUE)
-yhat.rf <- predict(rf, newdata = te_dat)
-mean((yhat.rf-te_dat[,"WALK_SCORE"])^2)
+rf <- randomForest(WALK_SCORE ~ ., data = data[train,])
+yhat.rf <- predict(rf, newdata = data[-train,])
+mean((yhat.rf-data[-train,"WALK_SCORE"])^2)
 
-importance(rf)
 varImpPlot(rf)
+```
+
+## Boosting
+
+```{r}
+boost <- gbm(WALK_SCORE ~ .,data = data[train,], distribution = "gaussian", n.trees = 30000, interaction.depth = 1, cv.folds = 5, shrinkage = 0.01)
+best_n_tress <- which.min(boost$cv.error)
+
+yhat.boost <- predict(boost, newdata = data[-train,], n.trees = best_n_tress)
+mean((yhat.boost - data[-train,"WALK_SCORE"])^2)
 ```
 
