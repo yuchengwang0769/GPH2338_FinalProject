@@ -92,8 +92,6 @@ te_dat <- data[-(1:nrow(data)/2), ]
 #but am running into issues with multicollinearlity? 
 
 
-#edit dummy
-
 #stepwise selection
 fwd.fit <- regsubsets(WALK_SCORE~., data=tr_data, method="forward")
 
