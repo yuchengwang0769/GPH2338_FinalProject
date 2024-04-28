@@ -116,23 +116,24 @@ hybrid.fit <- regsubsets(WALK_SCORE~., data=data[train,],method="seqrep")
 #ridge or LASSO? 
 #i dont think we need ridge since it doesn't shrink variables to 0? but maybe we could talk about the variables that are close to 0? 
 
-x_tr <- as.matrix(tr_data[,-47])
-y_tr <- tr_data[,47, drop=TRUE]
-x_te <- as.matrix(te_dat[, -47])
-y_te <- te_dat[,47, drop=TRUE]
+x_tr <- as.matrix(subset(data[train,],select=-c(WALK_SCORE)))
+y_tr <- data[train,"WALK_SCORE"]
+x_te <- as.matrix(subset(data[-train,],select=-c(WALK_SCORE)))
+y_te <- data[-train,"WALK_SCORE"]
 
 #ridge
 #cross validation to choose tuning parameter lambda
 set.seed(1)
-ridge.cv.out <- cv.glmnet(x_tr, y_tr, alpha=0)
+ridge.cv.out <- cv.glmnet(x_tr, y_tr, alpha=0, lambda=10^seq(2, -2, by = -.1), nfolds = 5)
 plot(ridge.cv.out)
-ridge.lam <- cv.out$lambda.min 
+ridge.lam <- ridge.cv.out$lambda.min 
+ridge_coef.mt <- predict(ridge.cv.out, s = ridge.lam, type = "coefficients")
 
 ridge.lr <- glmnet(x_tr, y_tr, alpha=0, lambda=ridge.lam, thresh=1e-12)
 ridge.tr.pred <- predict(ridge.lr, newx=x_tr)
 ridge.te.pred <- predict(ridge.lr, newx=x_te)
 ridge.tr.err <- mean((ridge.tr.pred-y_tr)^2)
-ridge.te.err <- mean((ridge.te.pred-y_tr)^2)
+ridge.te.err <- mean((ridge.te.pred-y_te)^2)
 ridge.tr.err
 ridge.te.err
 
@@ -145,18 +146,18 @@ ridge.coef[ridge.coef!=0]
 set.seed(1)
 lasso.cv.out <- cv.glmnet(x_tr, y_tr, alpha=1)
 plot(lasso.cv.out)
-lasso.lam <- cv.out$lambda.min 
+lasso.lam <- lasso.cv.out$lambda.min 
 
 lasso.lr <- glmnet(x_tr, y_tr, alpha=1, lambda=lasso.lam, thresh=1e-12)
 lasso.tr.pred <- predict(lasso.lr, newx=x_tr)
 lasso.te.pred <- predict(lasso.lr, newx=x_te)
 lasso.tr.err <- mean((lasso.tr.pred-y_tr)^2)
-lasso.te.err <- mean((lasso.te.pred-y_tr)^2)
+lasso.te.err <- mean((lasso.te.pred-y_te)^2)
 lasso.tr.err
 lasso.te.err 
 
 lasso.out <- glmnet(x, data$WALK_SCORE, alpha=1)
-lasso.coef <- predict(out, type="coefficients", s=lam)
+lasso.coef <- predict(out, type="coefficients", s=lasso.lam)
 lasso.coef
 lasso.coef[lasso.coef!=0] #79 variables chosen
 
