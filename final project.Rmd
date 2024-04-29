@@ -10,14 +10,14 @@ output:
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
-library(dplyr)
 library(MASS)
 library(tree)
 library(randomForest)
 library(gbm)
 library(leaps)
 library(glmnet)
-
+library(caret)
+library(plotmo)
 ```
 
 ## Data download
@@ -69,7 +69,7 @@ dummy <- fastDummies::dummy_cols(data, remove_first_dummy=TRUE)
 
 # Drop original categorical variables to make the final data
 
-data <- dummy[ , !(names(dummy) %in% c("GENDER","RACETHNICITY","MARITAL","EDUC","EMPLOY","INCOME","HOUSING","ALCOHOL","METRO","HOME_TYPE","SMOKER_CATEGORY","REGION9"))]
+data <- dummy[ , !(names(dummy) %in% c("GENDER","RACETHNICITY","MARITAL","EDUC","EMPLOY","INCOME","HOUSING","ALCOHOL","METRO","HOME_TYPE","SMOKER_CATEGORY","REGION9","missing.airdata"))]
 
 names(data) <- make.names(names(data), unique=TRUE)
 
@@ -78,8 +78,6 @@ rm(dummy, da37516.0001)
 ```
 
 ```{r}
-colnames(data) <- gsub("[-\\ - \\ \\, ]", "_", gsub("[,\\$]", "", gsub("\\+", "_or_more", gsub("___", "_", colnames(data)))))
-
 set.seed(1)
 train <- sample(1:nrow(data),nrow(data)/2)
 
@@ -97,16 +95,20 @@ train <- sample(1:nrow(data),nrow(data)/2)
 #perhaps hybrid approach of forward and backward stepwise, as it mimics best subset while retaining computational advantages of forward/backward stepwise
 
 #but am running into issues with multicollinearlity? 
-
+## 
 
 #edit dummy
 
 #stepwise selection
-fwd.fit <- regsubsets(WALK_SCORE~., data=data[train,], method="forward")
+fwd.fit <- regsubsets(WALK_SCORE~., data=data[train,], method="forward", nvmax=113)
+best_ind <- which.min(summary(fwd.fit)$bic) #best index using bic
+best_coef <- coef(fwd.fit, best_ind)
+
 
 bwd.fit <- regsubsets(WALK_SCORE~., data=data[train,], method="backward")
 
 hybrid.fit <- regsubsets(WALK_SCORE~., data=data[train,],method="seqrep")
+
 ```
 
 ```{r}
@@ -120,6 +122,9 @@ x_tr <- as.matrix(subset(data[train,],select=-c(WALK_SCORE)))
 y_tr <- data[train,"WALK_SCORE"]
 x_te <- as.matrix(subset(data[-train,],select=-c(WALK_SCORE)))
 y_te <- data[-train,"WALK_SCORE"]
+std_fit <- preProcess(x_tr, method = c("center", "scale"))
+x_tr_std <- predict(std_fit, x_tr)
+x_te_std <- predict(std_fit, x_te)
 
 #ridge
 #cross validation to choose tuning parameter lambda
@@ -129,38 +134,25 @@ plot(ridge.cv.out)
 ridge.lam <- ridge.cv.out$lambda.min 
 ridge_coef.mt <- predict(ridge.cv.out, s = ridge.lam, type = "coefficients")
 
-ridge.lr <- glmnet(x_tr, y_tr, alpha=0, lambda=ridge.lam, thresh=1e-12)
-ridge.tr.pred <- predict(ridge.lr, newx=x_tr)
-ridge.te.pred <- predict(ridge.lr, newx=x_te)
-ridge.tr.err <- mean((ridge.tr.pred-y_tr)^2)
+ridge.lr <- glmnet(x_tr_std, y_tr, alpha=0, lambda=ridge.lam, thresh=1e-12)
+plot(ridge.lr)
+ridge_coef <- predict(ridge.lr, s = ridge.lam, type = "coefficients")
+ridge.te.pred <- predict(ridge.lr, newx=x_te_std)
 ridge.te.err <- mean((ridge.te.pred-y_te)^2)
-ridge.tr.err
 ridge.te.err
-
-x <- as.matrix(data[,-47])
-ridge.out <- glmnet(x, data$WALK_SCORE, alpha=0)
-ridge.coef <- predict(ridge.out, type="coefficients", s=ridge.lam)
-ridge.coef[ridge.coef!=0]
 
 #LASSO
 set.seed(1)
-lasso.cv.out <- cv.glmnet(x_tr, y_tr, alpha=1)
+lasso.cv.out <- cv.glmnet(x_tr, y_tr, alpha=1, lambda=10^seq(2, -2, by = -.1), nfolds = 5)
 plot(lasso.cv.out)
 lasso.lam <- lasso.cv.out$lambda.min 
 
-lasso.lr <- glmnet(x_tr, y_tr, alpha=1, lambda=lasso.lam, thresh=1e-12)
-lasso.tr.pred <- predict(lasso.lr, newx=x_tr)
-lasso.te.pred <- predict(lasso.lr, newx=x_te)
-lasso.tr.err <- mean((lasso.tr.pred-y_tr)^2)
+lasso.lr <- glmnet(x_tr_std, y_tr, alpha=1, lambda=lasso.lam, thresh=1e-12)
+lasso_coef <- predict(lasso.lr, s = lasso.lam, type = "coefficients")
+lasso.te.pred <- predict(lasso.lr, newx=x_te_std)
 lasso.te.err <- mean((lasso.te.pred-y_te)^2)
-lasso.tr.err
 lasso.te.err 
-
-lasso.out <- glmnet(x, data$WALK_SCORE, alpha=1)
-lasso.coef <- predict(out, type="coefficients", s=lasso.lam)
-lasso.coef
-lasso.coef[lasso.coef!=0] #79 variables chosen
-
+plot_glmnet(lasso.lr)
 ```
 
 
