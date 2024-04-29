@@ -7,7 +7,7 @@ output:
     keep_md: true
 ---
 
-```{r setup, include=FALSE}
+```{r setup, include=FALSE,message=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(dplyr)
@@ -17,7 +17,7 @@ library(randomForest)
 library(gbm)
 library(leaps)
 library(glmnet)
-
+library(caret)
 ```
 
 ## Data download
@@ -40,11 +40,11 @@ raw <- da37516.0001
 
 ```{r}
 # Drop missing data, sample size=4,090
-data <- raw[complete.cases(raw[ , c("SMOKER_CATEGORY","ALCOHOL","TRACT_BELOW_POVERTY","TRACT_UNINSURED_OVER_65","TRACT_OWNER_OVER_30","TRACT_UNINSURED_UNDER_18","COUNTY_VIOLENT_CRIME")]),]
+data <- raw[complete.cases(raw[ , c("SMOKER_CATEGORY","ALCOHOLFREQUENCY","TRACT_BELOW_POVERTY","TRACT_UNINSURED_OVER_65","TRACT_OWNER_OVER_30","TRACT_UNINSURED_UNDER_18","COUNTY_VIOLENT_CRIME")]),]
 
 # Keep only needed columns
 data <- data %>% 
-  dplyr::select(starts_with("TRACT_")|starts_with("COUNTY_")|starts_with("AIR_")|all_of(c("AGE","GENDER","RACETHNICITY","EDUC","MARITAL","EMPLOY","INCOME","REGION9","METRO","HOUSING","HOME_TYPE","SMOKER_CATEGORY","ALCOHOL","PHYSICIANS_TG_DOC","WALK_SCORE")))
+  dplyr::select(starts_with("TRACT_")|starts_with("COUNTY_")|starts_with("AIR_")|all_of(c("AGE","GENDER","RACETHNICITY","EDUC4","MARITAL","EMPLOY","INCOME","REGION9","METRO","HOUSING","HOME_TYPE","SMOKER_CATEGORY","ALCOHOLFREQUENCY","PHYSICIANS_TG_DOC","WALK_SCORE")))
 
 
 # Impute those missing air quality data with median
@@ -57,10 +57,9 @@ data$AIR_QUALITY_DAYS_PM10<- ifelse(is.na(data$AIR_QUALITY_DAYS_PM10), median(da
 ```
 
 
-
 ```{r}
 # Add dummy variables
-for (x in c("GENDER","RACETHNICITY","MARITAL","EDUC","EMPLOY","INCOME","HOUSING","ALCOHOL","METRO","HOME_TYPE","SMOKER_CATEGORY","REGION9", "missing.airdata")){
+for (x in c("GENDER","RACETHNICITY","MARITAL","EDUC4","EMPLOY","INCOME","HOUSING","ALCOHOLFREQUENCY","METRO","HOME_TYPE","SMOKER_CATEGORY","REGION9", "missing.airdata")){
   lbls <- levels(data[[x]])
   levels(data[[x]]) <- sub("^\\([0-9]+\\) +(.+$)", "\\1", lbls)
 }
@@ -69,7 +68,8 @@ dummy <- fastDummies::dummy_cols(data, remove_first_dummy=TRUE)
 
 # Drop original categorical variables to make the final data
 
-data <- dummy[ , !(names(dummy) %in% c("GENDER","RACETHNICITY","MARITAL","EDUC","EMPLOY","INCOME","HOUSING","ALCOHOL","METRO","HOME_TYPE","SMOKER_CATEGORY","REGION9"))]
+data <- dummy[ , !(names(dummy) %in% c("GENDER","RACETHNICITY","MARITAL","EDUC4","EMPLOY","INCOME","HOUSING","ALCOHOLFREQUENCY","METRO","HOME_TYPE",
+                                       "SMOKER_CATEGORY","REGION9", "missing.airdata"))]
 
 names(data) <- make.names(names(data), unique=TRUE)
 
@@ -80,9 +80,15 @@ rm(dummy, da37516.0001)
 ```{r}
 colnames(data) <- gsub("[-\\ - \\ \\, ]", "_", gsub("[,\\$]", "", gsub("\\+", "_or_more", gsub("___", "_", colnames(data)))))
 
+data1 <- subset(data,select=-c(GENDER_Female, TRACT_OWNER_OCCUPIED_OF_OCCUPIED))
+#gender is binary, and TRACT_RENTER_OCCUPIED_OF_OCCUPID + TRACT_OWNER_OCCUPIED_OF_OCCUPIED = 1, so triggered the collinearity in selection
+#data1 <- data %>% subset(select=-TRACT_PERCENT_AM_INDIAN_ALONE) 
+```
+
+
+```{r}
 set.seed(1)
 train <- sample(1:nrow(data),nrow(data)/2)
-
 ```
 
 
@@ -91,20 +97,25 @@ train <- sample(1:nrow(data),nrow(data)/2)
 ```{r}
 #SUBSET SELECTION
 #identifying a subset of the predictors we believe to be related to response, fit a model using least squares on the reduced set of variables
-
-#not using best subset due to number of variables, possible models to fit would be huge (2^113)
-
+#not using best subset due to number of variables, possible models to fit would be huge (2^107)
 #perhaps hybrid approach of forward and backward stepwise, as it mimics best subset while retaining computational advantages of forward/backward stepwise
-
 #but am running into issues with multicollinearlity? 
 
+#testing stuff
+set.seed(1)
+train1 <- sample(1:nrow(data1),nrow(data)/2)
 
-#stepwise selection
-fwd.fit <- regsubsets(WALK_SCORE~., data=data[train,], method="forward")
 
-bwd.fit <- regsubsets(WALK_SCORE~., data=data[train,], method="backward")
+fwd.fit <- regsubsets(WALK_SCORE~., data=data1[train1,], method="forward")
+bwd.fit <- regsubsets(WALK_SCORE~., data=data1[train1,], method="backward")
+hybrid.fit <- regsubsets(WALK_SCORE~., data=data1[train1,],method="seqrep")
 
-hybrid.fit <- regsubsets(WALK_SCORE~., data=data[train,],method="seqrep")
+#finding pairs with high correlation
+data1.numeric <- model.matrix(~ . - 1, data = data1)
+var.cor <- cor(data1_numeric)
+which(abs(var.cor) >= 0.95&var.cor!= 1, arr.ind = TRUE)
+which(abs(var.cor) >= 0.90&var.cor!=1, arr.ind = TRUE)
+
 ```
 
 ```{r}
@@ -114,33 +125,37 @@ hybrid.fit <- regsubsets(WALK_SCORE~., data=data[train,],method="seqrep")
 #ridge or LASSO? 
 #i dont think we need ridge since it doesn't shrink variables to 0? but maybe we could talk about the variables that are close to 0? 
 
-x_tr <- as.matrix(tr_data[,-47])
-y_tr <- tr_data[,47, drop=TRUE]
+test <- (-train)
+x_tr <- as.matrix(train[,-47])
+y_tr <- train[,47, drop=TRUE]
 x_te <- as.matrix(te_dat[, -47])
 y_te <- te_dat[,47, drop=TRUE]
 
 #ridge
 #cross validation to choose tuning parameter lambda
-set.seed(1)
-ridge.cv.out <- cv.glmnet(x_tr, y_tr, alpha=0)
-plot(ridge.cv.out)
-ridge.lam <- cv.out$lambda.min 
-
-ridge.lr <- glmnet(x_tr, y_tr, alpha=0, lambda=ridge.lam, thresh=1e-12)
-ridge.tr.pred <- predict(ridge.lr, newx=x_tr)
-ridge.te.pred <- predict(ridge.lr, newx=x_te)
-ridge.tr.err <- mean((ridge.tr.pred-y_tr)^2)
-ridge.te.err <- mean((ridge.te.pred-y_tr)^2)
-ridge.tr.err
-ridge.te.err
-
-x <- as.matrix(data[,-47])
-ridge.out <- glmnet(x, data$WALK_SCORE, alpha=0)
-ridge.coef <- predict(ridge.out, type="coefficients", s=ridge.lam)
-ridge.coef[ridge.coef!=0]
+# set.seed(1)
+# ridge.cv.out <- cv.glmnet(x_tr, y_tr, alpha=0)
+# plot(ridge.cv.out)
+# ridge.lam <- cv.out$lambda.min 
+# 
+# ridge.lr <- glmnet(x_tr, y_tr, alpha=0, lambda=ridge.lam, thresh=1e-12)
+# ridge.tr.pred <- predict(ridge.lr, newx=x_tr)
+# ridge.te.pred <- predict(ridge.lr, newx=x_te)
+# ridge.tr.err <- mean((ridge.tr.pred-y_tr)^2)
+# ridge.te.err <- mean((ridge.te.pred-y_tr)^2)
+# ridge.tr.err
+# ridge.te.err
+# 
+# x <- as.matrix(data[,-47])
+# ridge.out <- glmnet(x, data$WALK_SCORE, alpha=0)
+# ridge.coef <- predict(ridge.out, type="coefficients", s=ridge.lam)
+# ridge.coef[ridge.coef!=0]
 
 #LASSO
 set.seed(1)
+x <- model.matrix(WALK_SCORE~., )[,]
+y <- 
+#cross vadliation to choose tuning parameter lambda
 lasso.cv.out <- cv.glmnet(x_tr, y_tr, alpha=1)
 plot(lasso.cv.out)
 lasso.lam <- cv.out$lambda.min 
