@@ -10,7 +10,6 @@ output:
 ```{r setup, include=FALSE,message=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
-library(dplyr)
 library(MASS)
 library(tree)
 library(randomForest)
@@ -18,6 +17,10 @@ library(gbm)
 library(leaps)
 library(glmnet)
 library(caret)
+<<<<<<< HEAD
+=======
+library(plotmo)
+>>>>>>> 2ca7683d70a836bd17e5ead7c9dc6c52e43c2e87
 ```
 
 ## Data download
@@ -67,9 +70,8 @@ for (x in c("GENDER","RACETHNICITY","MARITAL","EDUC4","EMPLOY","INCOME","HOUSING
 dummy <- fastDummies::dummy_cols(data, remove_first_dummy=TRUE)
 
 # Drop original categorical variables to make the final data
+data <- dummy[ , !(names(dummy) %in% c("GENDER","RACETHNICITY","MARITAL","EDUC","EMPLOY","INCOME","HOUSING","ALCOHOL","METRO","HOME_TYPE","SMOKER_CATEGORY","REGION9","missing.airdata"))]
 
-data <- dummy[ , !(names(dummy) %in% c("GENDER","RACETHNICITY","MARITAL","EDUC4","EMPLOY","INCOME","HOUSING","ALCOHOLFREQUENCY","METRO","HOME_TYPE",
-                                       "SMOKER_CATEGORY","REGION9", "missing.airdata"))]
 
 names(data) <- make.names(names(data), unique=TRUE)
 
@@ -80,7 +82,8 @@ rm(dummy, da37516.0001)
 ```{r}
 colnames(data) <- gsub("[-\\ - \\ \\, ]", "_", gsub("[,\\$]", "", gsub("\\+", "_or_more", gsub("___", "_", colnames(data)))))
 
-data1 <- subset(data,select=-c(GENDER_Female, TRACT_OWNER_OCCUPIED_OF_OCCUPIED))
+#was messing with things here 
+#data1 <- subset(data,select=-c(GENDER_Female, TRACT_OWNER_OCCUPIED_OF_OCCUPIED))
 #gender is binary, and TRACT_RENTER_OCCUPIED_OF_OCCUPID + TRACT_OWNER_OCCUPIED_OF_OCCUPIED = 1, so triggered the collinearity in selection
 #data1 <- data %>% subset(select=-TRACT_PERCENT_AM_INDIAN_ALONE) 
 ```
@@ -105,10 +108,15 @@ train <- sample(1:nrow(data),nrow(data)/2)
 set.seed(1)
 train1 <- sample(1:nrow(data1),nrow(data)/2)
 
-
 fwd.fit <- regsubsets(WALK_SCORE~., data=data1[train1,], method="forward")
 bwd.fit <- regsubsets(WALK_SCORE~., data=data1[train1,], method="backward")
 hybrid.fit <- regsubsets(WALK_SCORE~., data=data1[train1,],method="seqrep")
+
+#stepwise selection
+fwd.fit <- regsubsets(WALK_SCORE~., data=data[train,], method="forward", nvmax=113)
+best_ind <- which.min(summary(fwd.fit)$bic) #best index using bic
+best_coef <- coef(fwd.fit, best_ind)
+
 
 #finding pairs with high correlation
 data1.numeric <- model.matrix(~ . - 1, data = data1)
@@ -116,6 +124,7 @@ var.cor <- cor(data1_numeric)
 which(abs(var.cor) >= 0.95&var.cor!= 1, arr.ind = TRUE)
 which(abs(var.cor) >= 0.90&var.cor!=1, arr.ind = TRUE)
 
+hybrid.fit <- regsubsets(WALK_SCORE~., data=data[train,],method="seqrep")
 ```
 
 ```{r}
@@ -157,22 +166,42 @@ x <- model.matrix(WALK_SCORE~., )[,]
 y <- 
 #cross vadliation to choose tuning parameter lambda
 lasso.cv.out <- cv.glmnet(x_tr, y_tr, alpha=1)
+
+x_tr <- as.matrix(subset(data[train,],select=-c(WALK_SCORE)))
+y_tr <- data[train,"WALK_SCORE"]
+x_te <- as.matrix(subset(data[-train,],select=-c(WALK_SCORE)))
+y_te <- data[-train,"WALK_SCORE"]
+std_fit <- preProcess(x_tr, method = c("center", "scale"))
+x_tr_std <- predict(std_fit, x_tr)
+x_te_std <- predict(std_fit, x_te)
+
+#ridge
+#cross validation to choose tuning parameter lambda
+set.seed(1)
+ridge.cv.out <- cv.glmnet(x_tr, y_tr, alpha=0, lambda=10^seq(2, -2, by = -.1), nfolds = 5)
+plot(ridge.cv.out)
+ridge.lam <- ridge.cv.out$lambda.min 
+ridge_coef.mt <- predict(ridge.cv.out, s = ridge.lam, type = "coefficients")
+
+ridge.lr <- glmnet(x_tr_std, y_tr, alpha=0, lambda=ridge.lam, thresh=1e-12)
+plot(ridge.lr)
+ridge_coef <- predict(ridge.lr, s = ridge.lam, type = "coefficients")
+ridge.te.pred <- predict(ridge.lr, newx=x_te_std)
+ridge.te.err <- mean((ridge.te.pred-y_te)^2)
+ridge.te.err
+
+#LASSO
+set.seed(1)
+lasso.cv.out <- cv.glmnet(x_tr, y_tr, alpha=1, lambda=10^seq(2, -2, by = -.1), nfolds = 5)
 plot(lasso.cv.out)
-lasso.lam <- cv.out$lambda.min 
+lasso.lam <- lasso.cv.out$lambda.min 
 
-lasso.lr <- glmnet(x_tr, y_tr, alpha=1, lambda=lasso.lam, thresh=1e-12)
-lasso.tr.pred <- predict(lasso.lr, newx=x_tr)
-lasso.te.pred <- predict(lasso.lr, newx=x_te)
-lasso.tr.err <- mean((lasso.tr.pred-y_tr)^2)
-lasso.te.err <- mean((lasso.te.pred-y_tr)^2)
-lasso.tr.err
+lasso.lr <- glmnet(x_tr_std, y_tr, alpha=1, lambda=lasso.lam, thresh=1e-12)
+lasso_coef <- predict(lasso.lr, s = lasso.lam, type = "coefficients")
+lasso.te.pred <- predict(lasso.lr, newx=x_te_std)
+lasso.te.err <- mean((lasso.te.pred-y_te)^2)
 lasso.te.err 
-
-lasso.out <- glmnet(x, data$WALK_SCORE, alpha=1)
-lasso.coef <- predict(out, type="coefficients", s=lam)
-lasso.coef
-lasso.coef[lasso.coef!=0] #79 variables chosen
-
+plot_glmnet(lasso.lr)
 ```
 
 
