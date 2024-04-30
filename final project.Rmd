@@ -164,6 +164,23 @@ std <- preProcess(data[train,], method = c("center","scale"))
 train_std <- predict(std, newdata = data[train,])
 test_std <- predict(std, newdata = data[-train,])
 
+set.seed(1)
+fold_ind <- sample(1:5, nrow(train_std), replace = TRUE)
+
+knn_by_k <-  function(k) {
+    cv.error <- mean(sapply(1:5, function(j){
+    fit <- knnreg(WALK_SCORE ~ ., data = train_std[fold_ind != j, ], k = k)
+    pred <- predict(fit, newdata = train_std[fold_ind == j, ])
+    mean((train_std$WALK_SCORE[fold_ind == j] - pred)^2)
+    }))
+    data.frame(k=k, cv.error=cv.error)
+  }
+knn_cv <- do.call(rbind,lapply(1:100,knn_by_k))
+plot(knn_cv$k,knn_cv$cv.error)
+best_k <- knn_cv$k[knn_cv$cv.error==min(knn_cv$cv.error)]
+
+knn.final <- knnreg(WALK_SCORE ~ ., data = train_std, k = k)
+
 ```
 
 
