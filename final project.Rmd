@@ -40,11 +40,11 @@ raw <- da37516.0001
 
 ```{r}
 # Drop missing data, sample size=4,090
-data <- raw[complete.cases(raw[ , c("SMOKER_CATEGORY","ALCOHOLFREQUENCY","TRACT_BELOW_POVERTY","TRACT_UNINSURED_OVER_65","TRACT_OWNER_OVER_30","TRACT_UNINSURED_UNDER_18","COUNTY_VIOLENT_CRIME")]),]
+data <- raw[complete.cases(raw[ , c("SMOKER_CATEGORY","ALCOHOL","TRACT_BELOW_POVERTY","TRACT_UNINSURED_OVER_65","TRACT_OWNER_OVER_30","TRACT_UNINSURED_UNDER_18","COUNTY_VIOLENT_CRIME")]),]
 
 # Keep only needed columns
 data <- data %>% 
-  dplyr::select(starts_with("TRACT_")|starts_with("COUNTY_")|starts_with("AIR_")|all_of(c("AGE","GENDER","RACETHNICITY","EDUC4","MARITAL","EMPLOY","INCOME","REGION9","METRO","HOUSING","HOME_TYPE","SMOKER_CATEGORY","ALCOHOLFREQUENCY","PHYSICIANS_TG_DOC","WALK_SCORE")))
+  dplyr::select(starts_with("TRACT_")|starts_with("COUNTY_")|starts_with("AIR_")|all_of(c("AGE","GENDER","RACETHNICITY","EDUC4","MARITAL","EMPLOY","INCOME","REGION9","METRO","HOUSING","HOME_TYPE","SMOKER_CATEGORY","ALCOHOL","PHYSICIANS_TG_DOC","WALK_SCORE")))
 
 
 # Impute those missing air quality data with median
@@ -58,8 +58,8 @@ data$AIR_QUALITY_DAYS_PM10<- ifelse(is.na(data$AIR_QUALITY_DAYS_PM10), median(da
 
 
 ```{r}
-# Add dummy variables
-for (x in c("GENDER","RACETHNICITY","MARITAL","EDUC4","EMPLOY","INCOME","HOUSING","ALCOHOLFREQUENCY","METRO","HOME_TYPE","SMOKER_CATEGORY","REGION9", "missing.airdata")){
+# Add dummy variables for categorical variables
+for (x in c("GENDER","RACETHNICITY","MARITAL","EDUC4","EMPLOY","INCOME","HOUSING","ALCOHOL","METRO","HOME_TYPE","SMOKER_CATEGORY","REGION9")){
   lbls <- levels(data[[x]])
   levels(data[[x]]) <- sub("^\\([0-9]+\\) +(.+$)", "\\1", lbls)
 }
@@ -67,25 +67,19 @@ for (x in c("GENDER","RACETHNICITY","MARITAL","EDUC4","EMPLOY","INCOME","HOUSING
 dummy <- fastDummies::dummy_cols(data, remove_first_dummy=TRUE)
 
 # Drop original categorical variables to make the final data
-
-data <- dummy[ , !(names(dummy) %in% c("GENDER","RACETHNICITY","MARITAL","EDUC4","EMPLOY","INCOME","HOUSING","ALCOHOLFREQUENCY","METRO","HOME_TYPE",
+data <- dummy[ , !(names(dummy) %in% c("GENDER","RACETHNICITY","MARITAL","EDUC4","EMPLOY","INCOME","HOUSING","ALCOHOL","METRO","HOME_TYPE",
                                        "SMOKER_CATEGORY","REGION9", "missing.airdata"))]
 
+# Revise variable names
 names(data) <- make.names(names(data), unique=TRUE)
 
 rm(dummy, da37516.0001)
 
 ```
 
-```{r}
-colnames(data) <- gsub("[-\\ - \\ \\,]", "_", gsub("[,\\$]", "", gsub("\\+", "_or_more", gsub("___", "_", colnames(data)))))
-
-data1 <- subset(data,select=-GENDER_Female)
-                              
-```
-
 
 ```{r}
+# Draw training sample, 50% training, 50% test data
 set.seed(1)
 train <- sample(1:nrow(data),nrow(data)/2)
 ```
@@ -94,6 +88,21 @@ train <- sample(1:nrow(data),nrow(data)/2)
 ## Linear Regression
 
 ```{r}
+# Overall linear regression that include all variables
+origin.lm <- lm(WALK_SCORE ~ ., data=data[train,])
+pred.test.lm <- predict(origin.lm, newdata = data[-train,])
+mean((pred.test.lm-data[-train,"WALK_SCORE"])^2)
+
+# Function to calculate test error with coefficient
+func.coeftoerror <- function(coef){
+  test.data <- data[-train,]
+  te_x <- test.data %>% dplyr::select(names(coef)[-1])
+  te_pred <- cbind(1, as.matrix(te_x)) %*% coef
+  te_error <- mean((te_pred - test.data$WALK_SCORE)^2)
+  selected.var <- paste(names(coef)[-1], collapse = ",")
+  data.frame(test.error = te_error, n.var=length(names(coef))-1,selected.var=selected.var)
+}
+
 #SUBSET SELECTION
 #identifying a subset of the predictors we believe to be related to response, fit a model using least squares on the reduced set of variables
 #not using best subset due to number of variables, possible models to fit would be huge (2^107)
@@ -107,35 +116,27 @@ train <- sample(1:nrow(data),nrow(data)/2)
 #forward, backward, hybrid
 set.seed(1)
 
-fwd.fit <- regsubsets(WALK_SCORE~., data=data[train,], method="forward")
-bwd.fit <- regsubsets(WALK_SCORE~., data=data[train,], method="backward")
-hybrid.fit <- regsubsets(WALK_SCORE~., data=data[train,],method="seqrep")
+fwd.fit <- regsubsets(WALK_SCORE~., data=data[train,], method="forward", nvmax = 113)
+bwd.fit <- regsubsets(WALK_SCORE~., data=data[train,], method="backward", nvmax = 113)
+hybrid.fit <- regsubsets(WALK_SCORE~., data=data[train,],method="seqrep", nvmax = 30)
 
 fwd.summary <- summary(fwd.fit)
 bwd.summary<-summary(bwd.fit)
 hybrid.summary<-summary(hybrid.fit)
 
-#lets use cp, i used adj r2 and all the methods gave me only one variable
-best.ind.fwd <- which.min(fwd.summary$adjr2)
-coef(fwd.fit, best.ind.fwd)
-best.ind.fwd <- which.min(fwd.summary$cp) 
-coef(fwd.fit, best.ind.fwd)
-best.ind.bwd <- which.min(bwd.summary$cp)
-coef(bwd.fit, best.ind.bwd)
-best.ind.hybrid <- which.min(hybrid.summary$cp)
-coef(hybrid.fit, best.ind.hybrid)
+# USE BIC as criteria when choosing the best model for each method
+best.ind.fwd <- which.min(fwd.summary$bic)
+best.ind.bwd <- which.min(bwd.summary$bic)
+best.ind.hybrid <- which.min(hybrid.summary$bic)
 
-#the thing is we can say we didn't use selection methods because of multicollienarity in our data, so we used shrinkage methods
+best_coef.fwd <- coef(fwd.fit, best.ind.fwd)
+best_coef.bwd <- coef(bwd.fit, best.ind.bwd)
+best_coef.hybrid <- coef(hybrid.fit, best.ind.hybrid)
 
-#testing
-#finding pairs with high correlation
-# data1 <- data
-# data1.numeric <- model.matrix(~ . - 1, data = data1)
-# var.cor <- cor(data1.numeric)
-# which(abs(var.cor) >= 0.95&var.cor!= 1, arr.ind = TRUE)
-# which(abs(var.cor) >= 0.90&var.cor!=1, arr.ind = TRUE)
-# >=0.95: TRACT_RENTER_OCCUPIED_OF_OCCUPID, TRACT_OWNER_OCCUPIED_OF_OCCUPIED, GENDER_Female, GENDER_Male
-#either way i think we should remove GENDER_Female or GENDER_Male
+rbind(func.coeftoerror(best_coef.fwd),func.coeftoerror(best_coef.bwd),func.coeftoerror(best_coef.hybrid))
+
+# selection methods may be inappropriate for our analysis because of multicollienarity in our data, we also used shrinkage methods
+
 ```
 
 ```{r}
@@ -146,44 +147,40 @@ coef(hybrid.fit, best.ind.hybrid)
 #i dont think we need ridge since it doesn't shrink variables to 0? but maybe we could talk about the variables that are close to 0? 
 
 test <- (-train)
-x <- model.matrix(WALK_SCORE~., data)[,-47]
+x <- as.matrix(subset(data, select = -WALK_SCORE))
 y <- data$WALK_SCORE
 y.test <- y[test]
 
 #ridge
 #cross validation to choose tuning parameter lambda
 set.seed(1)
-ridge.cv.out <- cv.glmnet(x[train,], y[train], alpha=0)
-plot(ridge.cv.out)
+ridge.cv.out <- cv.glmnet(x[train,], y[train], alpha=0, nfolds = 5)
 ridge.lam <- ridge.cv.out$lambda.min
 
-ridge.lr <- glmnet(x[train,], y[train], alpha=0, lambda=ridge.lam, thresh=1e-12)
-ridge.pred <- predict(ridge.lr, newx=x[test,])
+#ridge regression with the selected lambda
+ridge.pred <- predict(ridge.cv.out, newx=x[test,],s="lambda.min")
 mean((ridge.pred-y.test)^2)
 
-ridge.out <- glmnet(x, y, alpha=0)
-ridge.coef <- predict(ridge.out, type="coefficients", s=ridge.lam)
+ridge.coef.val <- predict(ridge.cv.out, type="coefficients", s="lambda.min")
 
-ridge.coef.ind <- which(abs(ridge.coef.val) >= 1) #since ridge does not shrink towards 0 or peanlize as heavily as lasso, just looking at the variables that seem more sig
-ridge.coef.names <- colnames(x)[ridge.coef.ind]
+#since ridge does not shrink towards 0 or peanlize as heavily as lasso, just looking at the variables that seem more sig
+ridge.coef.ind <- which(abs(ridge.coef.val) >= 10) 
+ridge.coef.names <- ridge.coef.val@Dimnames[[1]][ridge.coef.ind]
 ridge.coef.tab <- cbind(ridge.coef.names, ridge.coef.val[ridge.coef.ind])
-
 
 #LASSO
 set.seed(1)
-#cross vadliation to choose tuning parameter lambda
-lasso.cv.out <- cv.glmnet(x[train,], y[train], alpha=1)
-plot(lasso.cv.out)
+
+#cross validation to choose tuning parameter lambda
+lasso.cv.out <- cv.glmnet(x[train,], y[train], alpha=1, nfolds = 5)
 lasso.lam <- lasso.cv.out$lambda.min 
 
 lasso.lr <- glmnet(x[train,], y[train], alpha=1, lambda=lasso.lam, thresh=1e-12)
 lasso.pred <- predict(lasso.lr, newx=x[test,])
 mean((lasso.pred-y.test)^2)
 
-lasso.out <- glmnet(x, y, alpha=1)
-lasso.coef <- predict(lasso.out, type="coefficients", s=lasso.lam)       
+lasso.coef <- predict(lasso.cv.out, type="coefficients", s=lasso.lam)       
 lasso.coef
-lasso.coef[lasso.coef!=0] #56 variables chosen
 
 ```
 
@@ -192,18 +189,17 @@ lasso.coef[lasso.coef!=0] #56 variables chosen
 ## KNN for regression
 
 ```{r}
-std <- preProcess(data[train,], method = c("center","scale"))
-train_std <- predict(std, newdata = data[train,])
-test_std <- predict(std, newdata = data[-train,])
 
 set.seed(1)
-fold_ind <- sample(1:5, nrow(train_std), replace = TRUE)
+traindata <- data[train,]
+testdata <- data[-train,]
+fold_ind <- sample(1:5, nrow(data[-train,]), replace = TRUE)
 
 knn_by_k <-  function(k) {
     cv.error <- mean(sapply(1:5, function(j){
-    fit <- knnreg(WALK_SCORE ~ ., data = train_std[fold_ind != j, ], k = k)
-    pred <- predict(fit, newdata = train_std[fold_ind == j, ])
-    mean((train_std$WALK_SCORE[fold_ind == j] - pred)^2)
+    fit <- knnreg(WALK_SCORE ~ ., data = traindata[fold_ind != j, ], k = k)
+    pred <- predict(fit, newdata = traindata[fold_ind == j, ])
+    mean((traindata$WALK_SCORE[fold_ind == j] - pred)^2)
     }))
     data.frame(k=k, cv.error=cv.error)
   }
@@ -211,7 +207,9 @@ knn_cv <- do.call(rbind,lapply(1:100,knn_by_k))
 plot(knn_cv$k,knn_cv$cv.error)
 best_k <- knn_cv$k[knn_cv$cv.error==min(knn_cv$cv.error)]
 
-knn.final <- knnreg(WALK_SCORE ~ ., data = train_std, k = k)
+knn.final <- knnreg(WALK_SCORE ~ ., data = traindata, k = best_k)
+knn.pred <- predict(knn.final, newdata=testdata)
+mean((knn.pred-data[-train,"WALK_SCORE"])^2)
 
 ```
 
