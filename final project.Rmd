@@ -116,9 +116,9 @@ func.coeftoerror <- function(coef){
 #forward, backward, hybrid
 set.seed(1)
 
-fwd.fit <- regsubsets(WALK_SCORE~., data=data[train,], method="forward", nvmax = 113)
-bwd.fit <- regsubsets(WALK_SCORE~., data=data[train,], method="backward", nvmax = 113)
-hybrid.fit <- regsubsets(WALK_SCORE~., data=data[train,],method="seqrep", nvmax = 30)
+fwd.fit <- regsubsets(WALK_SCORE~., data=data[train,], method="forward", nvmax = 50)
+bwd.fit <- regsubsets(WALK_SCORE~., data=data[train,], method="backward", nvmax = 50)
+hybrid.fit <- regsubsets(WALK_SCORE~., data=data[train,],method="seqrep", nvmax = 50)
 
 fwd.summary <- summary(fwd.fit)
 bwd.summary<-summary(bwd.fit)
@@ -190,16 +190,19 @@ lasso.coef
 
 ```{r}
 
+fit_std <- preProcess(data[train,], method = c("center","scale"))
+train_std <- predict(fit_std, newdata = data[train,])
+train_std$WALK_SCORE <- data[train,"WALK_SCORE"]
+test_std <- predict(fit_std, newdata = data[-train,])
+test_std$WALK_SCORE <- data[-train,"WALK_SCORE"]
 set.seed(1)
-traindata <- data[train,]
-testdata <- data[-train,]
 fold_ind <- sample(1:5, nrow(data[-train,]), replace = TRUE)
 
 knn_by_k <-  function(k) {
     cv.error <- mean(sapply(1:5, function(j){
-    fit <- knnreg(WALK_SCORE ~ ., data = traindata[fold_ind != j, ], k = k)
-    pred <- predict(fit, newdata = traindata[fold_ind == j, ])
-    mean((traindata$WALK_SCORE[fold_ind == j] - pred)^2)
+    fit <- knnreg(WALK_SCORE ~ ., data = train_std[fold_ind != j, ], k = k)
+    pred <- predict(fit, newdata = train_std[fold_ind == j, ])
+    mean((train_std$WALK_SCORE[fold_ind == j] - pred)^2)
     }))
     data.frame(k=k, cv.error=cv.error)
   }
@@ -207,8 +210,8 @@ knn_cv <- do.call(rbind,lapply(1:100,knn_by_k))
 plot(knn_cv$k,knn_cv$cv.error)
 best_k <- knn_cv$k[knn_cv$cv.error==min(knn_cv$cv.error)]
 
-knn.final <- knnreg(WALK_SCORE ~ ., data = traindata, k = best_k)
-knn.pred <- predict(knn.final, newdata=testdata)
+knn.final <- knnreg(WALK_SCORE ~ ., data = train_std, k = best_k)
+knn.pred <- predict(knn.final, newdata=test_std)
 mean((knn.pred-data[-train,"WALK_SCORE"])^2)
 
 ```
@@ -216,6 +219,7 @@ mean((knn.pred-data[-train,"WALK_SCORE"])^2)
 
 ## Random Forest
 ```{r}
+
 rf <- randomForest(WALK_SCORE ~ ., data = data[train,])
 yhat.rf <- predict(rf, newdata = data[-train,])
 mean((yhat.rf-data[-train,"WALK_SCORE"])^2)
