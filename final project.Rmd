@@ -231,9 +231,9 @@ varImpPlot(rf)
 
 ```{r}
 boost <- gbm(WALK_SCORE ~ .,data = data[train,], distribution = "gaussian", n.trees = 30000, interaction.depth = 1, cv.folds = 5, shrinkage = 0.01)
-best_n_tress <- which.min(boost$cv.error)
+best_n_trees <- which.min(boost$cv.error)
 
-yhat.boost <- predict(boost, newdata = data[-train,], n.trees = best_n_tress)
+yhat.boost <- predict(boost, newdata = data[-train,], n.trees = best_n_trees)
 mean((yhat.boost - data[-train,"WALK_SCORE"])^2)
 ```
 
